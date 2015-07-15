@@ -34,9 +34,9 @@ ng.module('smart-table')
       if (path.indexOf('.') != -1) {
           var partials = path.split('.');
           var key = partials.pop();
-          var parentPath = partials.join('.'); 
+          var parentPath = partials.join('.');
           var parentObject = $parse(parentPath)(object)
-          delete parentObject[key]; 
+          delete parentObject[key];
           if (Object.keys(parentObject).length == 0) {
             deepDelete(object, parentPath);
           }
@@ -104,22 +104,44 @@ ng.module('smart-table')
       return this.pipe();
     };
 
-    /**
-     * this will chain the operations of sorting and filtering based on the current table state (sort options, filtering, ect)
-     */
-    this.pipe = function pipe () {
-      var pagination = tableState.pagination;
-      var output;
-      filtered = tableState.search.predicateObject ? filter(safeCopy, tableState.search.predicateObject) : safeCopy;
+    this.pipeSearch = function pipeSearch (tableState, filtered) {
+      return tableState.search.predicateObject ? filter(filtered, tableState.search.predicateObject) : filtered;
+    };
+
+    this.pipeSort = function pipeSort (tableState, filtered) {
       if (tableState.sort.predicate) {
         filtered = orderBy(filtered, tableState.sort.predicate, tableState.sort.reverse);
       }
+      return filtered;
+    };
+
+    this.pipePagination = function pipePagination (tableState, filtered) {
+      var pagination = tableState.pagination;
+      var output;
       if (pagination.number !== undefined) {
         pagination.numberOfPages = filtered.length > 0 ? Math.ceil(filtered.length / pagination.number) : 1;
         pagination.start = pagination.start >= filtered.length ? (pagination.numberOfPages - 1) * pagination.number : pagination.start;
         output = filtered.slice(pagination.start, pagination.start + parseInt(pagination.number));
       }
-      displaySetter($scope, output || filtered);
+      return output || filtered;
+    };
+
+    /**
+     * this will chain the operations of sorting and filtering based on the current table state (sort options, filtering, ect)
+     */
+    this.pipe = function pipe () {
+      var pagination = tableState.pagination;
+      filtered = this.safeCopy();
+      if (ng.isFunction(this.pipePre)) {
+        filtered = this.pipePre(tableState, filtered);
+      }
+      filtered = this.pipeSearch(tableState, filtered);
+      filtered = this.pipeSort(tableState, filtered);
+      filtered = this.pipePagination(tableState, filtered);
+      if (ng.isFunction(this.pipePost)) {
+        filtered = this.pipePost(tableState, filtered);
+      }
+      displaySetter($scope, filtered);
     };
 
     /**
@@ -161,6 +183,10 @@ ng.module('smart-table')
      */
     this.tableState = function getTableState () {
       return tableState;
+    };
+
+    this.safeCopy = function getSafeCopy () {
+      return safeCopy;
     };
 
     this.getFilteredCollection = function getFilteredCollection () {
